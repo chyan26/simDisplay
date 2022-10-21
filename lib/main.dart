@@ -1,31 +1,55 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:image/image.dart' as img_decode;
+import 'package:flutter/services.dart' show FilteringTextInputFormatter, rootBundle;
 
 
-final List<File?> fileData = [];
-int? interval = 30;
-
-void main() => runApp(CarouselDemo());
+final List<File?> fileData=[];
+final List<File?> assetData = [];
+int? interval = 2000;
 
 final themeMode = ValueNotifier(2);
 
+Future<File> getImageFileFromAssets(String path) async {
+  final byteData = await rootBundle.load(path);
+
+  final file = File('/data/data/com.asiaa.sim_display/cache/test.tiff');
+  await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
+
+  return file;
+}
+
+void main() => runApp(const CarouselDemo());
+
+
 class CarouselDemo extends StatelessWidget {
+
+  const CarouselDemo({Key? key}) : super(key: key);
 
   Future<void> _requestAssets() async {
     // Request permissions.
     final PermissionState _ps = await PhotoManager.requestPermissionExtend();
+
+    assetData.add(await getImageFileFromAssets('images/simStarTracker_matrix.tiff'));
+    print(assetData.length);
     if (_ps.isAuth) {
        final List<AssetPathEntity> paths = await PhotoManager.getAssetPathList();
-       List<AssetEntity> media = await paths[0].getAssetListPaged(page: 0, size: 20);
-       for (int i = 0; i < media.length; i++) {
-          fileData.add(await media[i].file);
+       for (int i = 0; i< paths.length; i++){
+            if (paths[i].name == 'Pictures'){
+                print('We have pictures');
+                List<AssetEntity> media = await paths[i].getAssetListRange(start: 0, end: 1000);
+                for (int j = 0; j < media.length; j++) {
+                  //print(media[j].file.);
+                  fileData.add(await media[j].file);
+                }
+                fileData.sort((a, b) => a!.path.compareTo(b!.path));
+                print(fileData.length);
+            }
        }
     }
   }
@@ -43,11 +67,11 @@ class CarouselDemo extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           routes: {
             '/': (ctx) => CarouselDemoHome(),
+            '/matrix': (ctx) => MatrixDemo(),
             '/basic': (ctx) => BasicDemo(),
             '/setting': (ctx) => AppSetting(),
             '/yourpage': (ctx) => onTapHide(),
             '/image': (ctx) => Gallery(),
-            //'/fullscreen': (ctx) => FullscreenSliderDemo(),
            },
         );
       },
@@ -73,14 +97,16 @@ class DemoItem extends StatelessWidget {
 }
 
 class CarouselDemoHome extends StatelessWidget {
+  const CarouselDemoHome({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('StarTracker Display'),
+        title: const Text('StarTracker Display'),
         actions: [
           IconButton(
-              icon: Icon(Icons.nightlight_round),
+              icon: const Icon(Icons.nightlight_round),
               onPressed: () {
                 themeMode.value = themeMode.value == 1 ? 2 : 1;
               })
@@ -88,6 +114,7 @@ class CarouselDemoHome extends StatelessWidget {
       ),
       body: ListView(
         children: <Widget>[
+          DemoItem('Display matrix image', '/matrix'),
           DemoItem('Single image mode', '/basic'),
           DemoItem('Display Setting', '/setting'),
           DemoItem('Start Image Display', '/yourpage'),
@@ -110,7 +137,7 @@ class AppSetting extends StatelessWidget {
     return MaterialApp(
       //title: _title,
       home: Scaffold(
-        appBar: AppBar(title: Text('App Setting')),
+        appBar: AppBar(title: const Text('App Setting')),
         body: _Sliders(),
       ),
     );
@@ -124,7 +151,6 @@ class _Sliders extends StatefulWidget {
 
 class _SlidersState extends State<_Sliders> with RestorationMixin {
   final RestorableDouble _continuousValue = RestorableDouble(30);
-  //final RestorableDouble _discreteValue = RestorableDouble(20);
 
   @override
   String get restorationId => 'slider_demo';
@@ -138,7 +164,6 @@ class _SlidersState extends State<_Sliders> with RestorationMixin {
   @override
   void dispose() {
     _continuousValue.dispose();
-    //_discreteValue.dispose();
     super.dispose();
   }
 
@@ -172,6 +197,9 @@ class _SlidersState extends State<_Sliders> with RestorationMixin {
                       }
                     },
                     keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly
+                    ],
                     controller: TextEditingController(
                       text: _continuousValue.value.toStringAsFixed(0),
                     ),
@@ -181,7 +209,7 @@ class _SlidersState extends State<_Sliders> with RestorationMixin {
               Slider(
                 value: _continuousValue.value,
                 min: 0,
-                max: 300,
+                max: 2000,
                 onChanged: (value) {
                   setState(() {
                     _continuousValue.value = value;
@@ -189,7 +217,7 @@ class _SlidersState extends State<_Sliders> with RestorationMixin {
                   });
                 },
               ),
-              Text('Setting the interval'),
+              const Text('Setting the interval'),
             ],
           ),
           const SizedBox(height: 80),
@@ -202,17 +230,55 @@ class _SlidersState extends State<_Sliders> with RestorationMixin {
 
 }
 
+
+
+
+
 Uint8List get_decode_image(File? item){
   var data;
   data = item!.readAsBytesSync();
   img_decode.Image image = img_decode.decodeImage(data)!;
-  var newData = Uint8List.fromList(img_decode.encodeBmp(image));
+  var newData = Uint8List.fromList(img_decode.encodeJpg(image));
   return newData;
 }
 
+
+class MatrixDemo extends StatelessWidget {
+  const MatrixDemo({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final double height = MediaQuery.of(context).size.height;
+    return Scaffold(
+      //appBar: AppBar(title: Text('Basic Demo')),
+      body: CarouselSlider(
+        options: CarouselOptions(
+          viewportFraction: 1.0,
+          height: 2434,
+          initialPage: 0,
+          reverse: false,
+          autoPlay: false,
+        ),
+        items: assetData
+            .map((item) => Container(
+          color: Colors.black,
+          child: Center(
+              child: Image.memory(
+                  get_decode_image(item),
+                  fit: BoxFit.fitHeight,
+                  scale: 1.0,
+                  height: 2434,
+                  width: 1096)),
+        ))
+            .toList(),
+      ),
+    );
+  }
+}
+
+
 class BasicDemo extends StatelessWidget {
-
-
+  const BasicDemo({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -223,18 +289,51 @@ class BasicDemo extends StatelessWidget {
           child: CarouselSlider(
             options: CarouselOptions(
               viewportFraction: 1.0,
-              height: height,
+              height: 2434,
+              initialPage: 0,
+              reverse: false,
+              autoPlay: false,
             ),
             items: fileData
                 .map((item) => Container(
+              color: Colors.black,
               child: Center(
                   child: Image.memory(
                       get_decode_image(item),
                       fit: BoxFit.fitHeight,
                       scale: 1.0,
-                      height: 900,
-                      width: 900)),
+                      height: 2434,
+                      width: 1096)),
+            ))
+                .toList(),
+          )),
+    );
+  }
+}
+
+class BasicDemoTIFF extends StatelessWidget {
+
+  @override
+  Widget build(BuildContext context) {
+    final double height = MediaQuery.of(context).size.height;
+    return Scaffold(
+      //appBar: AppBar(title: Text('Basic Demo')),
+      body: Container(
+          child: CarouselSlider(
+            options: CarouselOptions(
+              viewportFraction: 1.0,
+              height: 2434,
+            ),
+            items: fileData
+                .map((item) => Container(
               color: Colors.black,
+              child: Center(
+                  child: Image.file(
+                      item!,
+                      fit: BoxFit.fitHeight,
+                      scale: 1.0,
+                      height: 2434,
+                      width: 1096)),
             ))
                 .toList(),
           )),
@@ -244,7 +343,11 @@ class BasicDemo extends StatelessWidget {
 
 
 
+
+
 class Gallery extends StatefulWidget {
+  const Gallery({Key? key}) : super(key: key);
+
   @override
   _GalleryState createState() => _GalleryState();
 }
@@ -252,20 +355,21 @@ class Gallery extends StatefulWidget {
 class _GalleryState extends State<Gallery> {
   // This will hold all the assets we fetched
   List<AssetEntity> assets = [];
+
   _fetchAssets() async {
     // Set onlyAll to true, to fetch only the 'Recent' album
     // which contains all the photos/videos in the storage
-    final albums = await PhotoManager.getAssetPathList(onlyAll: true);
-    final recentAlbum = albums.first;
-
-    // Now that we got the album, fetch all the assets it contains
-    final recentAssets = await recentAlbum.getAssetListRange(
-      start: 0, // start at index 0
-      end: 1000000, // end at a very big index (to get all the assets)
-    );
-
-    // Update the state and notify UI
-    setState(() => assets = recentAssets);
+    final albums = await PhotoManager.getAssetPathList();
+    for (int i = 0; i < albums.length; i++) {
+      if (albums[i].name == 'Pictures') {
+        final pictureAlbum = albums[i];
+        final recentAssets = await pictureAlbum.getAssetListRange(
+          start: 0, // start at index 0
+          end: 1000000, // end at a very big index (to get all the assets)
+        );
+        setState(() => assets = recentAssets);
+      }
+    }
   }
   @override
   void initState() {
@@ -277,7 +381,7 @@ class _GalleryState extends State<Gallery> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text('Gallery'),
+          title: const Text('Gallery'),
         ),
         body: Center(
           // Modify this line as follows
@@ -289,46 +393,49 @@ class _GalleryState extends State<Gallery> {
 }
 
 class onTapHide extends StatefulWidget {
+  const onTapHide({Key? key}) : super(key: key);
   @override
   _onTapHidePage createState() => _onTapHidePage();
 }
 
 class _onTapHidePage extends State<onTapHide> {
-  bool _showAppBar = true;
+  bool _showAppBar = false;
 
   @override
   Widget build(BuildContext context) {
-    //print(interval);
-
+    print(interval);
     final double height = MediaQuery.of(context).size.height;
+    final double ratio = MediaQuery.of(context).devicePixelRatio;
     final double width = MediaQuery.of(context).size.width;
-
+    //print('test =  $height $width $ratio');
     return Scaffold(
-      appBar: _showAppBar ? AppBar(title: Text('Tap to hide')) : null,
+      //appBar: _showAppBar ? AppBar(title: const Text('Tap to hide')) : null,
       body: Center(
         child: GestureDetector(
           onTap: () => setState(() => _showAppBar = !_showAppBar),
-          child: Container(
-            child: CarouselSlider(
-                options: CarouselOptions(
-                  autoPlay: true,
-                  autoPlayInterval: Duration(milliseconds: interval!),
-                  autoPlayAnimationDuration: Duration(milliseconds: 1),
-                  height: height,
-                  viewportFraction: 1.0,
-                  enlargeCenterPage: false,
-                ),
-                items: fileData
-                    .map((item) => Container(
-                  child: Image.memory(
-                      get_decode_image(item),
-                      scale: 1.0,
-                      fit: BoxFit.fitHeight,
-                      width: width),
-                  color: Colors.black,
-                ))
-                    .toList(),
-            )
+          child: CarouselSlider(
+              options: CarouselOptions(
+                autoPlay: true,
+                autoPlayInterval: Duration(milliseconds: interval!),
+                autoPlayAnimationDuration: const Duration(milliseconds: 1),
+                height: 2434,
+                viewportFraction: 1.0,
+                enlargeCenterPage: false,
+                pauseAutoPlayOnTouch: false,
+                initialPage: 0,
+                reverse: true,
+              ),
+              items: fileData
+                  .map((item) => Container(
+                color: Colors.black,
+                child: Image.memory(
+                    get_decode_image(item),
+                    scale: 1.0,
+                    fit: BoxFit.fitHeight,
+                    width: 1096,
+                    height :2434),
+              ))
+                  .toList(),
           ),
         ),
       ),
