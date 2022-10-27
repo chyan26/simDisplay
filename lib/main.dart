@@ -193,6 +193,7 @@ class _SlidersState extends State<_Sliders> with RestorationMixin {
                         setState(() {
                           _continuousValue.value =
                           newValue.clamp(0, 1000) as double;
+                          interval = newValue.toInt();
                         });
                       }
                     },
